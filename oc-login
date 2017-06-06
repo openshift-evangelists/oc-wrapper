@@ -1,0 +1,190 @@
+#!/bin/bash
+
+## Note that this script depends on
+## https://github.com/emcrisostomo/fswatch
+
+set -o errexit
+set -o errtrace
+set -o nounset
+set -o pipefail
+
+DOC="https://github.com/openshift-evangelists/oc-login/blob/master/README.adoc"
+SCRIPT_NAME=$(basename "$0")
+OC_BINARY=${OC_BINARY:-"oc"}
+
+################## AUXILIARY FUNCTIONS
+#
+#
+
+function currentContext {
+  local _ctx=$(${OC_BINARY} config current-context)
+  echo "$_ctx"
+}
+
+
+################## MAIN SCRIPT
+#
+#
+
+function help {
+  echo "Usage:"
+  echo " $SCRIPT_NAME -h"
+  echo ""
+  echo "Available Commands:"
+  echo ""
+  echo "  oc-login list"
+  echo "  oc-login status"
+#  echo "  oc-login get"
+#  echo "  oc-login set"
+  echo "  oc-login use <CONTEXT>"
+  echo ""
+  echo ""
+  echo "See the documentation at $DOC"
+}
+
+function list {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+
+  local _ctx=$(currentContext)
+  for context in `${OC_BINARY} config view -o jsonpath='{range .contexts[*]}{.name}{" "}{end}'`
+  do
+    if [ "${context}" == "${_ctx}" ]
+    then
+      echo " - ${context}  ***********************"
+    else
+      echo " - ${context}"
+    fi
+  done
+}
+
+function list.help {
+  echo "Lists existing contexts. It shows current context with a line of *"
+  echo ""
+  echo "See the documentation at $DOC"
+}
+
+function get {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+
+  #user 
+  #password oc config view -o jsonpath='{.users[?(@.name == "e2e")].user.password}'
+  #context
+  #server
+}
+
+function get.help {
+  echo "Gets "
+  echo ""
+  echo "Available Arguments:"
+  echo ""
+  echo ""
+  echo "See the documentation at $DOC"
+}
+
+function set {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+}
+
+function set.help {
+  echo "Sets "
+  echo ""
+  echo "Available Arguments:"
+  echo ""
+  echo ""
+  echo "See the documentation at $DOC"
+}
+
+function use {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+
+  local _ctx=$(currentContext)
+  [ "${_ctx}" == "${_arg1}" ] && return
+
+  ${OC_BINARY} config use-context ${_arg1}
+}
+
+function use.help {
+  echo "Uses the specified context"
+  echo ""
+  echo "Usage:"
+  echo " $SCRIPT_NAME use <CONTEXT>"
+  echo ""
+  echo "See the documentation at $DOC"
+}
+
+function status {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+
+  local _ctx=$(currentContext)
+
+  # Two cases, if named context
+  local _project=""
+  local _user=""
+  local _cluster=""
+
+  _project=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.namespace}')
+  _cluster=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}')
+  _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}')
+
+  echo "You're currently connected to: ${_ctx}"
+  echo " "
+  echo "Cluster: ${_cluster}"
+  echo "User: ${_user}"
+  echo "Project: ${_project}"
+}
+
+function status.help {
+  echo "Status "
+  echo ""
+  echo "Available Arguments:"
+  echo ""
+  echo ""
+  echo "See the documentation at $DOC"
+}
+
+if [[ $# -gt 0 ]]
+then
+   key="$1"
+   case $key in
+      list)
+        shift # past argument
+        list "$@"
+        ;;
+      get)
+        shift # past argument
+        get "$@"
+        ;;
+      set)
+        shift # past argument
+        set "$@"
+        ;;
+      use)
+        shift # past argument
+        use "$@"
+        ;;
+      status)
+        status
+        ;;
+      -h|--help)
+        help
+        ;;
+      *)
+        help
+        ;;
+#        shift # past argument
+#        $key "$@"  2> /dev/null || echo "Command $key not found"
+#        ;;
+   esac
+else
+   help
+fi
