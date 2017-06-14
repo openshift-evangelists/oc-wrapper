@@ -3,7 +3,7 @@
 ## Note that this script depends on
 ## https://github.com/emcrisostomo/fswatch
 
-set -o errexit
+#set -o errexit
 set -o errtrace
 set -o nounset
 set -o pipefail
@@ -18,6 +18,7 @@ OC_BINARY=${OC_BINARY:-"oc"}
 
 function currentContext {
   local _ctx=$(${OC_BINARY} config current-context)
+  # TODO: See if oc whoami -c is better
   echo "$_ctx"
 }
 
@@ -32,7 +33,9 @@ function help {
   echo ""
   echo "Available Commands:"
   echo ""
+  echo "  oc-login login"
   echo "  oc-login list"
+  echo "  oc-login use"
   echo "  oc-login status"
 #  echo "  oc-login get"
 #  echo "  oc-login set"
@@ -61,6 +64,30 @@ function list {
 
 function list.help {
   echo "Lists existing contexts. It shows current context with a line of *"
+  echo ""
+  echo "See the documentation at $DOC"
+}
+
+function login {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+  
+  ${OC_BINARY} whoami > /dev/null 2>&1
+  local _retCode=$?
+  if [ $_retCode -ne 0 ]; then
+    local _ctx=$(oc whoami -c)
+    local _cluster=$(${OC_BINARY} whoami --show-server)
+    local _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}' | cut -f 1 -d '/')
+    echo "oc login ${_cluster} -u ${_user}"
+    oc login ${_cluster} -u ${_user}
+  else
+    echo "User is already logged in and valid. Context is $(${OC_BINARY} whoami -c)"
+  fi
+}
+
+function login.help {
+  echo "Validates that the user is logged in with the current context, and if not, it logs it in"
   echo ""
   echo "See the documentation at $DOC"
 }
@@ -156,6 +183,10 @@ if [[ $# -gt 0 ]]
 then
    key="$1"
    case $key in
+      login)
+        shift # past argument
+        login "$@"
+        ;;
       list)
         shift # past argument
         list "$@"
