@@ -160,12 +160,15 @@ function status {
   local _cluster=""
 
   _project=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.namespace}')
-  _cluster=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}')
-  _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}')
+  _cluster=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}' | cut -f 2 -d '/' | sed -e 's/-/\./g')
+  _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}' | cut -f 1 -d '/')
+  ${OC_BINARY} get user/~ -o name --token "$(${OC_BINARY} whoami -t)" > /dev/null 2>&1
+  _connected=$?
 
-  echo "You're currently connected to: ${_ctx}"
+  echo "You're using profile: ${_ctx}"
+  [ $_connected -eq 0 ] && echo "[INFO] You're currently connected. Token is still valid" || echo "[ERROR] You're currently disconnected. Token is no longer valid"
   echo " "
-  echo "Cluster: ${_cluster}"
+  echo "Cluster: https://${_cluster}"
   echo "User: ${_user}"
   echo "Project: ${_project}"
 }
