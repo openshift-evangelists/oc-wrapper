@@ -2,10 +2,10 @@
 Script to manage login to different clusters and context switching.
 
 
-## List of commands
+## List of commands
 This script helps you login, logout, re-login and see available oc contexts in an easy and meaningful way
 
-## Login to a cluster
+## Login to a cluster
 Validates that the user is logged in with the current context, and if not, it logs it in. Using the user and cluster in the current context.
 
 ```
@@ -22,7 +22,7 @@ Using project "myproject".
 User has succesfully logged back to 3_7
 ```
 
-## Logout of a cluster
+## Logout of a cluster
 Logs the user out, by de-selecting the context in use.
 
 ```
@@ -52,8 +52,8 @@ $ oc-login list
  - 3_6
  - istio
 ```
- 
-## Change to a known context
+
+## Change to a known context
 Changes to the specified context
 
 ```
