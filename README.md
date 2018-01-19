@@ -1,6 +1,8 @@
 # oc Wrapper to manage contexts in a proper way
 Script to wrap oc that manages login to different clusters and context switching.
 
+NOTE: You'll need to either set the variable OC_BINARY to your real oc command, or place the binary in this directory and rename it to oc-origin.
+
 
 ## List of commands
 This script helps you login, logout, re-login and see available oc contexts in an easy and meaningful way

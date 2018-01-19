@@ -82,33 +82,39 @@ function login {
   then
     ${OC_BINARY} login "$@"
   else
-    ${OC_BINARY} whoami --request-timeout=$TIMEOUT > /dev/null 2>&1
-    _retCode=$?
-    if [ $_retCode -ne 0 ]; then
-      # Check to see if the server is up
-      ${OC_BINARY} whoami --request-timeout=$TIMEOUT /dev/null 2> /tmp/oc-whoami-err.temp
-      grep "Client.Timeout" /tmp/oc-whoami-err.temp > /dev/null 2>&1
+    # TODO: If we're connecting to a net new cluster there will be parameters
+    if [ "${_arg1}" != "" ]
+    then
+      ${OC_BINARY} login "$@"
+    else
+      ${OC_BINARY} whoami --request-timeout=$TIMEOUT > /dev/null 2>&1
       _retCode=$?
-      rm -f /tmp/oc-whoami-err.temp
       if [ $_retCode -ne 0 ]; then
-        local _ctx=$(${OC_BINARY} whoami -c)
-        local _cluster=$(${OC_BINARY} whoami --show-server)
-        local _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}' | cut -f 1 -d '/')
-        echo "oc login ${_cluster} -u ${_user} --request-timeout=2s"
-        ${OC_BINARY} login ${_cluster} -u ${_user} --request-timeout=$TIMEOUT
+        # Check to see if the server is up
+        ${OC_BINARY} whoami --request-timeout=$TIMEOUT /dev/null 2> /tmp/oc-whoami-err.temp
+        grep "Client.Timeout" /tmp/oc-whoami-err.temp > /dev/null 2>&1
         _retCode=$?
-        if [ $_retCode -eq 0 ]; then
-          ${OC_BINARY} config delete-context ${_ctx} > /dev/null 2>&1
-          ${OC_BINARY} config rename-context $(${OC_BINARY} whoami -c) ${_ctx} > /dev/null 2>&1
-          echo "User has succesfully logged back to ${_ctx}"
+        rm -f /tmp/oc-whoami-err.temp
+        if [ $_retCode -ne 0 ]; then
+          local _ctx=$(${OC_BINARY} whoami -c)
+          local _cluster=$(${OC_BINARY} whoami --show-server)
+          local _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}' | cut -f 1 -d '/')
+          echo "oc login ${_cluster} -u ${_user} --request-timeout=2s"
+          ${OC_BINARY} login ${_cluster} -u ${_user} --request-timeout=$TIMEOUT
+          _retCode=$?
+          if [ $_retCode -eq 0 ]; then
+            ${OC_BINARY} config delete-context ${_ctx} > /dev/null 2>&1
+            ${OC_BINARY} config rename-context $(${OC_BINARY} whoami -c) ${_ctx} > /dev/null 2>&1
+            echo "User has succesfully logged back to ${_ctx}"
+          else
+            echo "There's been an error trying to log the user back in"
+          fi
         else
-          echo "There's been an error trying to log the user back in"
+          echo "There's been a Timeout error trying to log the user back in. Is the server up and reachable?"
         fi
       else
-        echo "There's been a Timeout error trying to log the user back in. Is the server up and reachable?"
+        echo "User is already logged in and valid. Context is $(${OC_BINARY} whoami -c)"
       fi
-    else
-      echo "User is already logged in and valid. Context is $(${OC_BINARY} whoami -c)"
     fi
   fi
 }
