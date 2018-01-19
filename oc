@@ -10,8 +10,10 @@ set -o pipefail
 
 DOC="https://github.com/openshift-evangelists/oc-login/blob/master/README.adoc"
 SCRIPT_NAME=$(basename "$0")
-OC_BINARY=${OC_BINARY:-"oc"}
+OC_BINARY=${OC_BINARY:-"oc-origin"}
 TIMEOUT=${OC_LOGIN_TIMEOUT:-"1s"}
+
+[ ! -x ${OC_BINARY} ] && echo "The real oc binary \"${OC_BINARY}\" does not exist. Make sure it's renamed to something different than oc" && exit 1
 
 ################## AUXILIARY FUNCTIONS
 #
@@ -34,14 +36,12 @@ function help {
   echo ""
   echo "Available Commands:"
   echo ""
-  echo "  oc-login login"
-  echo "  oc-login logout"
-  echo "  oc-login status"
-  echo "  oc-login list"
-  echo "  oc-login use <CONTEXT>"
-#  echo "  oc-login delete [<CONTEXT>]"
-#  echo "  oc-login get"
-#  echo "  oc-login set"
+  echo "  $SCRIPT_NAME login"
+  echo "  $SCRIPT_NAME logout"
+  echo "  $SCRIPT_NAME context-status"
+  echo "  $SCRIPT_NAME list"
+  echo "  $SCRIPT_NAME use <CONTEXT>"
+  echo "  $SCRIPT_NAME rename-context <NEW-CONTEXT-NAME>"
   echo ""
   echo ""
   echo "See the documentation at $DOC"
@@ -76,35 +76,41 @@ function login {
 
   [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
   
-  ${OC_BINARY} whoami --request-timeout=$TIMEOUT > /dev/null 2>&1
-  _retCode=$?
-  if [ $_retCode -ne 0 ]; then
-    # Check to see if the server is up
-    ${OC_BINARY} whoami --request-timeout=$TIMEOUT /dev/null 2> /tmp/oc-whoami-err.temp
-    grep "Client.Timeout" /tmp/oc-whoami-err.temp > /dev/null 2>&1
+  # If there's no current context, delegate to real login
+  local _ctx=$(currentContext)
+  if [ "" == "${_ctx}" ]
+  then
+    ${OC_BINARY} login "$@"
+  else
+    ${OC_BINARY} whoami --request-timeout=$TIMEOUT > /dev/null 2>&1
     _retCode=$?
-    rm -f /tmp/oc-whoami-err.temp
     if [ $_retCode -ne 0 ]; then
-      local _ctx=$(${OC_BINARY} whoami -c)
-      local _cluster=$(${OC_BINARY} whoami --show-server)
-      local _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}' | cut -f 1 -d '/')
-      echo "oc login ${_cluster} -u ${_user} --request-timeout=2s"
-      ${OC_BINARY} login ${_cluster} -u ${_user} --request-timeout=$TIMEOUT
+      # Check to see if the server is up
+      ${OC_BINARY} whoami --request-timeout=$TIMEOUT /dev/null 2> /tmp/oc-whoami-err.temp
+      grep "Client.Timeout" /tmp/oc-whoami-err.temp > /dev/null 2>&1
       _retCode=$?
-      if [ $_retCode -eq 0 ]; then
-        ${OC_BINARY} config delete-context ${_ctx} > /dev/null 2>&1
-        ${OC_BINARY} config rename-context $(${OC_BINARY} whoami -c) ${_ctx} > /dev/null 2>&1
-        echo "User has succesfully logged back to ${_ctx}"
+      rm -f /tmp/oc-whoami-err.temp
+      if [ $_retCode -ne 0 ]; then
+        local _ctx=$(${OC_BINARY} whoami -c)
+        local _cluster=$(${OC_BINARY} whoami --show-server)
+        local _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}' | cut -f 1 -d '/')
+        echo "oc login ${_cluster} -u ${_user} --request-timeout=2s"
+        ${OC_BINARY} login ${_cluster} -u ${_user} --request-timeout=$TIMEOUT
+        _retCode=$?
+        if [ $_retCode -eq 0 ]; then
+          ${OC_BINARY} config delete-context ${_ctx} > /dev/null 2>&1
+          ${OC_BINARY} config rename-context $(${OC_BINARY} whoami -c) ${_ctx} > /dev/null 2>&1
+          echo "User has succesfully logged back to ${_ctx}"
+        else
+          echo "There's been an error trying to log the user back in"
+        fi
       else
-        echo "There's been an error trying to log the user back in"
+        echo "There's been a Timeout error trying to log the user back in. Is the server up and reachable?"
       fi
     else
-      echo "There's been a Timeout error trying to log the user back in. Is the server up and reachable?"
+      echo "User is already logged in and valid. Context is $(${OC_BINARY} whoami -c)"
     fi
-  else
-    echo "User is already logged in and valid. Context is $(${OC_BINARY} whoami -c)"
   fi
-  set +x
 }
 
 function login.help {
@@ -168,7 +174,45 @@ function use.help {
   echo "See the documentation at $DOC"
 }
 
-function status {
+function project {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+
+  local _ctx=$(currentContext)
+  [ "" == "${_arg1}" ] && exec ${OC_BINARY} project -h && return 
+  ${OC_BINARY} config set-context ${_ctx} --namespace=${_arg1} > /dev/null 2>&1
+  _cluster_name=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}')
+  _cluster=$(${OC_BINARY} config view -o jsonpath='{.clusters[?(@.name == "'${_cluster_name}'")].cluster.server}')
+  echo "Now using project \"${_arg1}\" on server \"$_cluster\"."
+}
+
+function project.help {
+  ${OC_BINARY} project -h
+}
+
+function rename-context {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+
+  local _ctx=$(currentContext)
+  [ "" == "${_arg1}" ] && echo "You need to specify a new context name" && return
+  [ "${_ctx}" == "${_arg1}" ] && return
+  
+  ${OC_BINARY} config rename-context ${_ctx} ${_arg1}
+}
+
+function rename-context.help {
+  echo "Renames the current context"
+  echo ""
+  echo "Usage:"
+  echo " $SCRIPT_NAME rename-context <NEW-CONTEXT-NAME>"
+  echo ""
+  echo "See the documentation at $DOC"
+}
+
+function context-status {
   local _arg1=${1:-}
 
   [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
@@ -181,7 +225,8 @@ function status {
   local _cluster=""
 
   _project=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.namespace}')
-  _cluster=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}' | cut -f 2 -d '/' | sed -e 's/-/\./g')
+  _cluster_name=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}')
+  _cluster=$(${OC_BINARY} config view -o jsonpath='{.clusters[?(@.name == "'${_cluster_name}'")].cluster.server}')
   _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}' | cut -f 1 -d '/')
   ${OC_BINARY} get user/~ -o name --token "$(${OC_BINARY} whoami -t)" > /dev/null 2>&1
   _connected=$?
@@ -194,7 +239,7 @@ function status {
   echo "Project: ${_project}"
 }
 
-function status.help {
+function context-status.help {
   echo "Status "
   echo ""
   echo "Available Arguments:"
@@ -228,26 +273,27 @@ then
         shift # past argument
         list "$@"
         ;;
-      get)
-        shift # past argument
-        get "$@"
-        ;;
-      set)
-        shift # past argument
-        set "$@"
-        ;;
       use)
         shift # past argument
         use "$@"
         ;;
-      status)
-        status
+      project)
+        shift # past argument
+        project "$@"
         ;;
-      -h|--help)
-        help
+      rename-context)
+        shift # past argument
+        rename-context "$@"
         ;;
+      context-status)
+        context-status
+        ;;
+#      -h|--help)
+#        help
+#        ;;
       *)
-        help
+        echo "Sending command to real oc"
+        exec ${OC_BINARY} "$@"
         ;;
 #        shift # past argument
 #        $key "$@"  2> /dev/null || echo "Command $key not found"
