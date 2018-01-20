@@ -8,9 +8,18 @@ set -o errtrace
 set -o nounset
 set -o pipefail
 
+# Handle source locations that might be a symlink (ref: http://bit.ly/2kcvSCS)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
 DOC="https://github.com/openshift-evangelists/oc-login/blob/master/README.adoc"
 SCRIPT_NAME=$(basename "$0")
-OC_BINARY=${OC_BINARY:-"oc-origin"}
+OC_BINARY=${OC_BINARY:-"$DIR/oc-origin"}
 TIMEOUT=${OC_LOGIN_TIMEOUT:-"1s"}
 
 [ ! -x ${OC_BINARY} ] && echo "The real oc binary \"${OC_BINARY}\" does not exist. Make sure it's renamed to something different than oc" && exit 1
