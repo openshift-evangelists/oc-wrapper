@@ -68,3 +68,7 @@ Changes the name of the current context to something more meaningful.
 ```
 $ oc rename-context 3_7
 ```
+
+
+## Wrapper in action (VIDEO)
+[![oc wrapper in action](http://img.youtube.com/vi/fG5pMokm8r8/0.jpg)](http://www.youtube.com/watch?v=fG5pMokm8r8 "oc wrapper")
