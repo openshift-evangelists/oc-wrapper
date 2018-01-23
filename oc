@@ -1,8 +1,5 @@
 #!/bin/bash
 
-## Note that this script depends on
-## https://github.com/emcrisostomo/fswatch
-
 #set -o errexit
 set -o errtrace
 set -o nounset
@@ -17,10 +14,11 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
-DOC="https://github.com/openshift-evangelists/oc-login/blob/master/README.adoc"
+DOC="https://github.com/openshift-evangelists/oc-wrapper/blob/master/README.md"
 SCRIPT_NAME=$(basename "$0")
 OC_BINARY=${OC_BINARY:-"$DIR/oc-origin"}
 TIMEOUT=${OC_LOGIN_TIMEOUT:-"1s"}
+OC_DEBUG_ENABLED=${OC_DEBUG_ENABLED:-"0"}  # Use log levels: 0 NONE, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE
 
 [ ! -x ${OC_BINARY} ] && echo "The real oc binary \"${OC_BINARY}\" does not exist. Make sure it's renamed to something different than oc" && exit 1
 
@@ -34,23 +32,55 @@ function currentContext {
   echo "$_ctx"
 }
 
+function _exec_oc {
+  logInfo "Sending command to real oc"
+  logDebug "Before"
+  logDebug "exec ${OC_BINARY} $@"
+  exec ${OC_BINARY} "$@"
+  logDebug "After"
+}
+
+function _oc_newKubecfg {
+  logInfo "Sending command to real oc"
+  logDebug "Before"
+  logDebug "KUBECONFIG=~/.kube/config.trash ${OC_BINARY} $@"
+  cp -f ~/.kube/config ~/.kube/config.trash
+  KUBECONFIG=~/.kube/config.trash ${OC_BINARY} "$@"
+  [ debugEnabled ] && rm -f ~/.kube/config.trash
+  logDebug "After"
+}
+
+function debugEnabled() {
+  [ "$OC_DEBUG_ENABLED" == "" ] && return 0
+}
+
+function logDebug(){
+  [ "$OC_DEBUG_ENABLED" -ge 4 ] && echo "[DEBUG] $@"
+}
+
+function logInfo(){
+  [ "$OC_DEBUG_ENABLED" -ge 3 ] && echo "[INFO] $@"
+}
 
 ################## MAIN SCRIPT
 #
 #
 
 function help {
-  echo "Usage:"
-  echo " $SCRIPT_NAME -h"
+  echo "OpenShift Wrapper"
   echo ""
-  echo "Available Commands:"
+  echo "This wrapper helps work with contexts in a meaningful way"
   echo ""
-  echo "  $SCRIPT_NAME login"
-  echo "  $SCRIPT_NAME logout"
-  echo "  $SCRIPT_NAME context-status"
-  echo "  $SCRIPT_NAME list"
-  echo "  $SCRIPT_NAME use <CONTEXT>"
-  echo "  $SCRIPT_NAME rename-context <NEW-CONTEXT-NAME>"
+  echo "Basic Commands:"
+  echo ""
+  echo "  login"
+  echo "  logout"
+  echo "  context-status"
+  echo "  list"
+  echo "  use <CONTEXT>"
+  echo "  rename-context <NEW-CONTEXT-NAME>"
+  echo
+  ${OC_BINARY} -h
   echo ""
   echo ""
   echo "See the documentation at $DOC"
@@ -112,6 +142,7 @@ function login {
           ${OC_BINARY} login ${_cluster} -u ${_user} --request-timeout=$TIMEOUT
           _retCode=$?
           if [ $_retCode -eq 0 ]; then
+            # TODO: Login might change the username/cluster if it has been customized.
             ${OC_BINARY} config delete-context ${_ctx} > /dev/null 2>&1
             ${OC_BINARY} config rename-context $(${OC_BINARY} whoami -c) ${_ctx} > /dev/null 2>&1
             echo "User has succesfully logged back to ${_ctx}"
@@ -130,41 +161,6 @@ function login {
 
 function login.help {
   echo "Validates that the user is logged in with the current context, and if not, it logs it in"
-  echo ""
-  echo "See the documentation at $DOC"
-}
-
-function get {
-  local _arg1=${1:-}
-
-  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
-
-  #user 
-  #password oc config view -o jsonpath='{.users[?(@.name == "e2e")].user.password}'
-  #context
-  #server
-}
-
-function get.help {
-  echo "Gets "
-  echo ""
-  echo "Available Arguments:"
-  echo ""
-  echo ""
-  echo "See the documentation at $DOC"
-}
-
-function set {
-  local _arg1=${1:-}
-
-  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
-}
-
-function set.help {
-  echo "Sets "
-  echo ""
-  echo "Available Arguments:"
-  echo ""
   echo ""
   echo "See the documentation at $DOC"
 }
@@ -195,7 +191,8 @@ function project {
   [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
 
   local _ctx=$(currentContext)
-  [ "" == "${_arg1}" ] && exec ${OC_BINARY} project -h && return 
+  [ "" == "${_arg1}" ] && _exec_oc project -h && return 
+
   ${OC_BINARY} config set-context ${_ctx} --namespace=${_arg1} > /dev/null 2>&1
   _cluster_name=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}')
   _cluster=$(${OC_BINARY} config view -o jsonpath='{.clusters[?(@.name == "'${_cluster_name}'")].cluster.server}')
@@ -204,6 +201,21 @@ function project {
 
 function project.help {
   ${OC_BINARY} project -h
+}
+
+function new-project {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+
+  local _ctx=$(currentContext)
+  [ "" == "${_arg1}" ] && _exec_oc new-project -h && return 
+  _oc_newKubecfg new-project "$@"
+  ${OC_BINARY} config set-context ${_ctx} --namespace=${_arg1} > /dev/null 2>&1
+}
+
+function new-project.help {
+  ${OC_BINARY} new-project -h
 }
 
 function rename-context {
@@ -249,7 +261,7 @@ function context-status {
   echo "You're using profile: ${_ctx}"
   [ $_connected -eq 0 ] && echo "[INFO] You're currently connected. Token is still valid" || echo "[ERROR] You're currently disconnected. Token is no longer valid"
   echo " "
-  echo "Cluster: https://${_cluster}"
+  echo "Cluster: ${_cluster}"
   echo "User: ${_user}"
   echo "Project: ${_project}"
 }
@@ -296,6 +308,10 @@ then
         shift # past argument
         project "$@"
         ;;
+      new-project)
+        shift # past argument
+        new-project "$@"
+        ;;
       rename-context)
         shift # past argument
         rename-context "$@"
@@ -303,16 +319,12 @@ then
       context-status)
         context-status
         ;;
-#      -h|--help)
-#        help
-#        ;;
-      *)
-        echo "Sending command to real oc"
-        exec ${OC_BINARY} "$@"
+      -h|--help)
+        help
         ;;
-#        shift # past argument
-#        $key "$@"  2> /dev/null || echo "Command $key not found"
-#        ;;
+      *)
+        _exec_oc "$@"
+        ;;
    esac
 else
    help
