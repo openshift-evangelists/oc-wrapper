@@ -79,6 +79,7 @@ function help {
   echo "  list"
   echo "  use <CONTEXT>"
   echo "  rename-context <NEW-CONTEXT-NAME>"
+  echo "  delete-context <CONTEXT>"
   echo
   ${OC_BINARY} -h
   echo ""
@@ -114,7 +115,7 @@ function login {
   local _retCode
 
   [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
-  
+
   # If there's no current context, delegate to real login
   local _ctx=$(currentContext)
   if [ "" == "${_ctx}" ]
@@ -191,7 +192,7 @@ function project {
   [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
 
   local _ctx=$(currentContext)
-  [ "" == "${_arg1}" ] && _exec_oc project -h && return 
+  [ "" == "${_arg1}" ] && _exec_oc project -h && return
 
   ${OC_BINARY} config set-context ${_ctx} --namespace=${_arg1} > /dev/null 2>&1
   _cluster_name=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}')
@@ -209,7 +210,7 @@ function new-project {
   [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
 
   local _ctx=$(currentContext)
-  [ "" == "${_arg1}" ] && _exec_oc new-project -h && return 
+  [ "" == "${_arg1}" ] && _exec_oc new-project -h && return
   _oc_newKubecfg new-project "$@"
   ${OC_BINARY} config set-context ${_ctx} --namespace=${_arg1} > /dev/null 2>&1
 }
@@ -226,8 +227,18 @@ function rename-context {
   local _ctx=$(currentContext)
   [ "" == "${_arg1}" ] && echo "You need to specify a new context name" && return
   [ "${_ctx}" == "${_arg1}" ] && return
-  
+
   ${OC_BINARY} config rename-context ${_ctx} ${_arg1}
+}
+
+function delete-context {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+
+  [ "" == "${_arg1}" ] && echo "You need to specify a context name" && return
+
+  ${OC_BINARY} config delete-context ${_arg1}
 }
 
 function rename-context.help {
@@ -315,6 +326,10 @@ then
       rename-context)
         shift # past argument
         rename-context "$@"
+        ;;
+      delete-context)
+        shift # past argument
+        delete-context "$@"
         ;;
       context-status)
         context-status
