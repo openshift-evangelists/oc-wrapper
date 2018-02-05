@@ -46,8 +46,10 @@ function _oc_newKubecfg {
   logDebug "KUBECONFIG=~/.kube/config.trash ${OC_BINARY} $@"
   cp -f ~/.kube/config ~/.kube/config.trash
   KUBECONFIG=~/.kube/config.trash ${OC_BINARY} "$@"
+  local retCode=$?
   [ debugEnabled ] && rm -f ~/.kube/config.trash
   logDebug "After"
+  return $retCode
 }
 
 function debugEnabled() {
@@ -212,11 +214,33 @@ function new-project {
   local _ctx=$(currentContext)
   [ "" == "${_arg1}" ] && _exec_oc new-project -h && return
   _oc_newKubecfg new-project "$@"
-  ${OC_BINARY} config set-context ${_ctx} --namespace=${_arg1} > /dev/null 2>&1
+  # Only change current context if previous action succeeds.
+  if [ "$?" -eq "0" ]
+  then
+    ${OC_BINARY} config set-context ${_ctx} --namespace=${_arg1} > /dev/null 2>&1
+  fi
 }
 
 function new-project.help {
   ${OC_BINARY} new-project -h
+}
+function delete-project {
+  local _arg1=${1:-}
+
+  [ "$_arg1" == "-h" ] || [ "$_arg1" == "--help" ] && ${FUNCNAME[0]}.help && return 0
+
+  local _ctx=$(currentContext)
+  [ "" == "${_arg1}" ] && _exec_oc delete project -h && return 
+  ${OC_BINARY} delete project "$@"
+  # Only change current context if previous action succeeds.
+  if [ "$?" -eq "0" ]
+  then
+    ${OC_BINARY} config set-context ${_ctx} --namespace= > /dev/null 2>&1
+  fi
+}
+
+function delete-project.help {
+  ${OC_BINARY} delete project -h
 }
 
 function rename-context {
@@ -231,6 +255,15 @@ function rename-context {
   ${OC_BINARY} config rename-context ${_ctx} ${_arg1}
 }
 
+function rename-context.help {
+  echo "Renames the current context"
+  echo ""
+  echo "Usage:"
+  echo " $SCRIPT_NAME rename-context <NEW-CONTEXT-NAME>"
+  echo ""
+  echo "See the documentation at $DOC"
+}
+
 function delete-context {
   local _arg1=${1:-}
 
@@ -241,11 +274,11 @@ function delete-context {
   ${OC_BINARY} config delete-context ${_arg1}
 }
 
-function rename-context.help {
-  echo "Renames the current context"
+function delete-context.help {
+  echo "Deletes the specified context"
   echo ""
   echo "Usage:"
-  echo " $SCRIPT_NAME rename-context <NEW-CONTEXT-NAME>"
+  echo " $SCRIPT_NAME delete-context <CONTEXT-NAME>"
   echo ""
   echo "See the documentation at $DOC"
 }
@@ -330,6 +363,15 @@ then
       delete-context)
         shift # past argument
         delete-context "$@"
+        ;;
+      delete)
+        if [ "$2" == "project" ]
+        then
+          shift 2
+          delete-project "$@"
+        else
+          _exec_oc "$@"
+        fi
         ;;
       context-status)
         context-status
