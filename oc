@@ -195,6 +195,7 @@ function project {
 
   local _ctx=$(currentContext)
   [ "" == "${_arg1}" ] && _exec_oc project -h && return
+  [ "-q" == "${_arg1}" ] && _exec_oc project -q && return
 
   ${OC_BINARY} config set-context ${_ctx} --namespace=${_arg1} > /dev/null 2>&1
   _cluster_name=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}')
