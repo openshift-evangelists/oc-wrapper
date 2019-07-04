@@ -273,7 +273,13 @@ function delete-context {
 
   [ "" == "${_arg1}" ] && echo "You need to specify a context name" && return
 
+  local __user=$(kubectl config view -o jsonpath='{.contexts[?(@.name == "$_arg1")].context.user}' 2> /dev/null)
+  local __cluster=$(kubectl config view -o jsonpath='{.contexts[?(@.name == "$_arg1")].context.cluster}' 2> /dev/null)
+
+  ${OC_BINARY} config unset users.${__user} &> /dev/null
+  ${OC_BINARY} config unset clusters.${__cluster} &> /dev/null
   ${OC_BINARY} config delete-context ${_arg1}
+  ${OC_BINARY} config unset current-context &> /dev/null
 }
 
 function delete-context.help {
@@ -292,15 +298,17 @@ function context-status {
 
   local _ctx=$(currentContext)
 
+  [ "$_ctx" == "" ] && echo "There's no context selected. Use 'oc use <context-name>' or 'oc list'" && return 0
+
   # Two cases, if named context
   local _project=""
   local _user=""
   local _cluster=""
 
-  _project=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.namespace}')
-  _cluster_name=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}')
-  _cluster=$(${OC_BINARY} config view -o jsonpath='{.clusters[?(@.name == "'${_cluster_name}'")].cluster.server}')
-  _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}' | cut -f 1 -d '/')
+  _project=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.namespace}' 2> /dev/null)
+  _cluster_name=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.cluster}' 2> /dev/null)
+  _cluster=$(${OC_BINARY} config view -o jsonpath='{.clusters[?(@.name == "'${_cluster_name}'")].cluster.server}' 2> /dev/null)
+  _user=$(${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == "'${_ctx}'")].context.user}' | cut -f 1 -d '/' 2> /dev/null)
   ${OC_BINARY} get user/~ -o name --token "$(${OC_BINARY} whoami -t)" > /dev/null 2>&1
   _connected=$?
 
