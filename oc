@@ -32,6 +32,32 @@ function currentContext {
   echo "$_ctx"
 }
 
+function currentUser {
+  local _ctx=${1:-}
+  [ "${_ctx}" == "" ] && _ctx=$(currentContext)
+  if [ "${_ctx}" == "" ]
+  then
+    echo ""
+  else
+    local _path="{.contexts[?(@.name == \"$_ctx\")].context.user}"
+    local _user="$(${OC_BINARY} config view -o jsonpath="$_path" 2> /dev/null)"
+    echo "$_user"
+  fi
+}
+
+function currentCluster {
+  local _ctx=${1:-}
+  [ "${_ctx}" == "" ] && _ctx=$(currentContext)
+  if [ "${_ctx}" == "" ]
+  then
+    echo ""
+  else
+    local _path="{.contexts[?(@.name == \"$_ctx\")].context.cluster}"
+    local _cluster="$(${OC_BINARY} config view -o jsonpath="$_path" 2> /dev/null)"
+    echo "$_cluster"
+  fi
+}
+
 function _exec_oc {
   logInfo "Sending command to real oc"
   logDebug "Before"
@@ -273,13 +299,18 @@ function delete-context {
 
   [ "" == "${_arg1}" ] && echo "You need to specify a context name" && return
 
-  local __user=$(kubectl config view -o jsonpath='{.contexts[?(@.name == "$_arg1")].context.user}' 2> /dev/null)
-  local __cluster=$(kubectl config view -o jsonpath='{.contexts[?(@.name == "$_arg1")].context.cluster}' 2> /dev/null)
+  # echo "${OC_BINARY} config view -o jsonpath='{.contexts[?(@.name == \"$_arg1\")].context.user}'"
+  local __user=$(currentUser $_arg1)
+  local __cluster=$(currentCluster $_arg1)
 
   ${OC_BINARY} config unset users.${__user} &> /dev/null
   ${OC_BINARY} config unset clusters.${__cluster} &> /dev/null
-  ${OC_BINARY} config delete-context ${_arg1}
-  ${OC_BINARY} config unset current-context &> /dev/null
+  ${OC_BINARY} config delete-context ${_arg1} &> /dev/null
+  if [ "$(currentContext)" == "${_arg1}" ]
+  then
+    ${OC_BINARY} config unset current-context &> /dev/null
+    echo "Current OC context has been unset. Please use \"oc list\" to list available context, and \"oc use <context-name>\" to set one"
+  fi
 }
 
 function delete-context.help {
