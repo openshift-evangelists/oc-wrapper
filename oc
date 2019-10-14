@@ -17,10 +17,12 @@ DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 DOC="https://github.com/openshift-evangelists/oc-wrapper/blob/master/README.md"
 SCRIPT_NAME=$(basename "$0")
 OC_BINARY=${OC_BINARY:-"$DIR/oc-origin"}
+OC_CONTEXT=${OC_CONTEXT}
 TIMEOUT=${OC_LOGIN_TIMEOUT:-"1s"}
 OC_DEBUG_ENABLED=${OC_DEBUG_ENABLED:-"0"}  # Use log levels: 0 NONE, 1 ERROR, 2 WARN, 3 INFO, 4 DEBUG, 5 TRACE
 
 [ ! -x ${OC_BINARY} ] && echo "The real oc binary \"${OC_BINARY}\" does not exist. Make sure it's renamed to something different than oc" && exit 1
+[ "" != "${OC_CONTEXT}" ] && OC_BINARY="${OC_BINARY} --config=${OC_CONTEXT}"
 
 ################## AUXILIARY FUNCTIONS
 #
